@@ -1,0 +1,565 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SYSTEM BREACH</title>
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#fff;
+  font-family:Arial,Helvetica,sans-serif;
+}
+
+#cv{
+  width:100%;
+  height:100%;
+  display:block;
+  background:#fff;
+  cursor:none;
+}
+
+.overlay{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  pointer-events:none;
+}
+
+#hackBtn{
+  margin-top:40px;
+  padding:18px 42px;
+  border:2px solid #000;
+  background:#fff;
+  color:#000;
+  font-size:14px;
+  letter-spacing:4px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .25s ease;
+  opacity:0;
+  transform:translateY(30px);
+  pointer-events:none;
+}
+
+#hackBtn.active{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+
+#hackBtn:hover{
+  background:#000;
+  color:#fff;
+  transform:scale(1.05);
+}
+
+.flash{
+  position:fixed;
+  inset:0;
+  background:#000;
+  opacity:0;
+  pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<div class="overlay">
+  <button id="hackBtn">ACCESS FILE</button>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<script>
+const cv = document.getElementById('cv');
+const cx = cv.getContext('2d');
+const hackBtn = document.getElementById('hackBtn');
+const flash = document.getElementById('flash');
+
+let W = cv.width = window.innerWidth;
+let H = cv.height = window.innerHeight;
+
+window.addEventListener('resize',()=>{
+  W = cv.width = window.innerWidth;
+  H = cv.height = window.innerHeight;
+});
+
+// ─────────────────────────────────────────
+// TIME
+// ─────────────────────────────────────────
+let T = 0;
+let dt = 1/60;
+
+// ─────────────────────────────────────────
+// STATES
+// ─────────────────────────────────────────
+let phase = 'warning';
+let progress = 0;
+let revealT = 0;
+
+// ─────────────────────────────────────────
+// SCRAMBLE CHARS
+// ─────────────────────────────────────────
+const SC = '01ABXZ#@$%!?∞∆Ω▓▒░/'.split('');
+
+// ─────────────────────────────────────────
+// FLOATING DATA STRINGS
+// ─────────────────────────────────────────
+const DATA = [
+  'ERR://',
+  '0xFFAA',
+  'SIGNAL LOST',
+  'BREACH',
+  'SYSTEM FAIL',
+  'OVERRIDE',
+  'STATIC',
+  'DECRYPT',
+  'INTRUSION',
+  'NODE_01',
+  'WARNING',
+  'SYNC FAIL',
+  '010101',
+  'NULL://',
+  'UNAUTHORIZED'
+];
+
+const particles = Array.from({length:60},(_,i)=>(
+  {
+    x:Math.random()*W,
+    y:Math.random()*H,
+    str:DATA[i%DATA.length],
+    size:9 + Math.random()*12,
+    speed:10 + Math.random()*25,
+    alpha:0.03 + Math.random()*0.08,
+    phase:Math.random()*Math.PI*2
+  }
+));
+
+// ─────────────────────────────────────────
+// GLITCH SLICES
+// ─────────────────────────────────────────
+let glitchSlices = [];
+
+function triggerGlitch(intensity=1){
+  const amount = 3 + Math.floor(Math.random()*8*intensity);
+
+  for(let i=0;i<amount;i++){
+    glitchSlices.push({
+      y:Math.random()*H,
+      h:2 + Math.random()*40,
+      ox:(Math.random()-0.5)*120*intensity,
+      life:0.04 + Math.random()*0.1,
+      age:0
+    });
+  }
+}
+
+function applyGlitches(){
+  for(let i=glitchSlices.length-1;i>=0;i--){
+    const g = glitchSlices[i];
+    g.age += dt;
+
+    if(g.age > g.life){
+      glitchSlices.splice(i,1);
+      continue;
+    }
+
+    try{
+      const d = cx.getImageData(0,g.y,W,g.h);
+      cx.putImageData(d,g.ox,g.y);
+    }catch(e){}
+  }
+}
+
+// ─────────────────────────────────────────
+// GRID
+// ─────────────────────────────────────────
+function drawGrid(){
+  cx.save();
+  cx.strokeStyle='rgba(0,0,0,0.04)';
+  cx.lineWidth=1;
+
+  const gs = 42;
+
+  for(let x=0;x<W;x+=gs){
+    cx.beginPath();
+    cx.moveTo(x,0);
+    cx.lineTo(x,H);
+    cx.stroke();
+  }
+
+  for(let y=0;y<H;y+=gs){
+    cx.beginPath();
+    cx.moveTo(0,y);
+    cx.lineTo(W,y);
+    cx.stroke();
+  }
+
+  cx.restore();
+}
+
+// ─────────────────────────────────────────
+// FLOATING DATA
+// ─────────────────────────────────────────
+function drawData(){
+  cx.save();
+
+  particles.forEach(p=>{
+    p.y -= p.speed * dt;
+
+    if(p.y < -20){
+      p.y = H + 20;
+      p.x = Math.random()*W;
+    }
+
+    const blink = Math.sin(T*2 + p.phase) * 0.5 + 0.5;
+
+    cx.globalAlpha = p.alpha * blink;
+    cx.fillStyle = '#000';
+    cx.font = `${p.size}px Courier New`;
+    cx.fillText(p.str,p.x,p.y);
+  });
+
+  cx.restore();
+}
+
+// ─────────────────────────────────────────
+// SCANLINES
+// ─────────────────────────────────────────
+function drawScanlines(){
+  cx.save();
+
+  for(let y=0;y<H;y+=3){
+    cx.globalAlpha = 0.03;
+    cx.fillStyle='#000';
+    cx.fillRect(0,y,W,1);
+  }
+
+  const sy = (T*120)%H;
+
+  const g = cx.createLinearGradient(0,sy-30,0,sy+30);
+  g.addColorStop(0,'rgba(0,0,0,0)');
+  g.addColorStop(0.5,'rgba(0,0,0,0.12)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+
+  cx.fillStyle=g;
+  cx.fillRect(0,sy-30,W,60);
+
+  cx.restore();
+}
+
+// ─────────────────────────────────────────
+// WARNING TEXT
+// ─────────────────────────────────────────
+function drawWarning(){
+
+  const mainText = 'SYSTEM HACKED';
+  const subText = 'UNAUTHORIZED SIGNAL DETECTED';
+
+  cx.textAlign='center';
+  cx.textBaseline='middle';
+
+  cx.font=`900 ${Math.min(W*0.08,100)}px Arial Black`;
+
+  let offsetX = 0;
+
+  if(Math.random() < 0.08){
+    offsetX = (Math.random()-0.5)*20;
+  }
+
+  cx.save();
+  cx.globalAlpha=0.08;
+  cx.fillStyle='#000';
+  cx.fillText(mainText,W/2+offsetX+10,H/2-120);
+  cx.restore();
+
+  let display = mainText;
+
+  if(Math.random() < 0.15){
+    display = mainText
+      .split('')
+      .map(ch=> ch===' ' ? ' ' : SC[Math.floor(Math.random()*SC.length)])
+      .join('');
+  }
+
+  cx.fillStyle='#000';
+  cx.fillText(display,W/2+offsetX,H/2-120);
+
+  cx.font=`400 14px Courier New`;
+  cx.globalAlpha=0.35;
+  cx.fillText(subText,W/2,H/2-70);
+
+  cx.globalAlpha=1;
+}
+
+// ─────────────────────────────────────────
+// LOADING SCREEN
+// ─────────────────────────────────────────
+function drawLoading(){
+
+  const barW = Math.min(W*0.5,700);
+  const barH = 18;
+
+  const x = W/2 - barW/2;
+  const y = H/2;
+
+  cx.save();
+  cx.strokeStyle='rgba(0,0,0,0.4)';
+  cx.lineWidth=2;
+  cx.strokeRect(x,y,barW,barH);
+
+  cx.fillStyle='#000';
+  cx.globalAlpha=0.9;
+  cx.fillRect(x,y,barW*(progress/100),barH);
+
+  if(Math.random() < 0.2){
+    cx.globalAlpha=0.3;
+    cx.fillRect(x + Math.random()*barW,y,40+Math.random()*120,barH);
+  }
+
+  cx.restore();
+
+  cx.save();
+  cx.textAlign='center';
+  cx.font='bold 16px Courier New';
+  cx.fillStyle='#000';
+
+  const pct = Math.floor(progress).toString().padStart(2,'0');
+
+  cx.fillText(`${pct}%`,W/2,y+48);
+  cx.fillText('DECRYPTING AUDIO FILE...',W/2,y+90);
+
+  cx.restore();
+}
+
+// ─────────────────────────────────────────
+// REVEAL SCREEN
+// ─────────────────────────────────────────
+function drawReveal(){
+
+  revealT += dt;
+
+  const a = Math.min(revealT/1.2,1);
+
+  const song = 'GLASS FREQUENCY';
+  const date = 'OUT 23 MAY';
+
+  cx.save();
+  cx.textAlign='center';
+  cx.textBaseline='middle';
+
+  const pulse = Math.sin(T*4)*0.5+0.5;
+
+  cx.globalAlpha = 0.02 + pulse*0.03;
+  cx.fillStyle='#000';
+  cx.fillRect(0,0,W,H);
+
+  cx.globalAlpha = a;
+
+  cx.font=`900 ${Math.min(W*0.09,120)}px Arial Black`;
+
+  let gx = 0;
+  let gy = 0;
+
+  if(Math.random()<0.12){
+    gx = (Math.random()-0.5)*14;
+    gy = (Math.random()-0.5)*8;
+  }
+
+  cx.fillStyle='#000';
+  cx.fillText(song,W/2+gx,H/2-20+gy);
+
+  cx.globalAlpha = a*0.15;
+  cx.fillText(song,W/2+18,H/2-12);
+
+  cx.globalAlpha = a*0.5;
+  cx.font='400 18px Courier New';
+  cx.fillText(date,W/2,H/2+70);
+
+  cx.globalAlpha = a*0.18;
+  cx.font='400 11px Courier New';
+  cx.fillText('SIGNAL RESTORED // TRANSMISSION_PENDING',W/2,H/2+100);
+
+  cx.restore();
+}
+
+// ─────────────────────────────────────────
+// AUDIO FX
+// ─────────────────────────────────────────
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+
+function beep(freq=220,duration=0.08,type='square',vol=0.03){
+
+  const osc = AC.createOscillator();
+  const gain = AC.createGain();
+
+  osc.type = type;
+  osc.frequency.value = freq;
+
+  gain.gain.value = vol;
+
+  osc.connect(gain);
+  gain.connect(AC.destination);
+
+  osc.start();
+
+  gain.gain.exponentialRampToValueAtTime(
+    0.0001,
+    AC.currentTime + duration
+  );
+
+  osc.stop(AC.currentTime + duration);
+}
+
+function glitchNoise(){
+
+  const bufferSize = AC.sampleRate * 0.12;
+  const buffer = AC.createBuffer(1, bufferSize, AC.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for(let i=0;i<bufferSize;i++){
+    data[i] = (Math.random() * 2 - 1) * 0.25;
+  }
+
+  const noise = AC.createBufferSource();
+  const gain = AC.createGain();
+
+  noise.buffer = buffer;
+
+  gain.gain.value = 0.035;
+
+  noise.connect(gain);
+  gain.connect(AC.destination);
+
+  noise.start();
+}
+
+let lastLoadSound = 0;
+
+// ─────────────────────────────────────────
+// BUTTON INTERACTION
+// ─────────────────────────────────────────
+setTimeout(()=>{
+  hackBtn.classList.add('active');
+},1800);
+
+hackBtn.addEventListener('click',()=>{
+
+  if(AC.state === 'suspended'){
+    AC.resume();
+  }
+
+  beep(120,0.2,'sawtooth',0.05);
+  glitchNoise();
+
+  phase = 'loading';
+  progress = 0;
+
+  triggerGlitch(3);
+
+  flash.style.transition = 'none';
+  flash.style.opacity = 1;
+
+  setTimeout(()=>{
+    flash.style.transition = 'opacity .6s ease';
+    flash.style.opacity = 0;
+  },60);
+
+  hackBtn.classList.remove('active');
+});
+
+// ─────────────────────────────────────────
+// MAIN LOOP
+// ─────────────────────────────────────────
+function frame(){
+
+  dt = 1/60;
+  T += dt;
+
+  cx.fillStyle='#fff';
+  cx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawData();
+  drawScanlines();
+
+  if(phase === 'warning'){
+
+    drawWarning();
+
+    if(Math.random() < 0.08){
+      triggerGlitch(0.8);
+    }
+
+  }
+
+  if(phase === 'loading'){
+
+    drawWarning();
+    drawLoading();
+
+    progress += dt * 18;
+
+    if(T - lastLoadSound > 0.08){
+      lastLoadSound = T;
+
+      const pitch = 200 + progress * 4;
+      beep(pitch,0.03,'square',0.02);
+    }
+
+    if(progress >= 100){
+      progress = 100;
+      phase = 'reveal';
+      triggerGlitch(2.5);
+
+      glitchNoise();
+      beep(90,0.4,'sawtooth',0.06);
+
+      setTimeout(()=>{
+        beep(240,0.5,'triangle',0.04);
+      },120);
+    }
+
+    if(Math.random() < 0.14){
+      triggerGlitch(1.2);
+    }
+  }
+
+  if(phase === 'reveal'){
+
+    drawReveal();
+
+    if(Math.random() < 0.18){
+      triggerGlitch(1.5);
+    }
+  }
+
+  applyGlitches();
+
+  requestAnimationFrame(frame);
+}
+
+frame();
+
+</script>
+</body>
+</html>
+
+
+
