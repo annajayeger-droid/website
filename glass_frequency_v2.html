@@ -1,0 +1,638 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GLASS FREQUENCY</title>
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#fff;
+}
+
+#cv{
+  width:100%;
+  height:100%;
+  display:block;
+  cursor:pointer;
+  background:#fff;
+  touch-action:none;
+}
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<script>
+const cv=document.getElementById('cv');
+const cx=cv.getContext('2d');
+
+let W=window.innerWidth;
+let H=window.innerHeight;
+
+cv.width=W;
+cv.height=H;
+
+// ───────────────────────────────────────────────────────
+// TIME
+// ───────────────────────────────────────────────────────
+
+let T=0;
+let dt=1/60;
+
+const BPM=100;
+const BEAT=60/BPM;
+
+let beatT=0;
+
+// ───────────────────────────────────────────────────────
+// BOOT STATE
+// ───────────────────────────────────────────────────────
+
+let bootPhase=true;
+let bootT=0;
+let bootProgress=0;
+
+const BOOT_LINES=[
+  'INITIALIZING SIGNAL',
+  'CALIBRATING NOISE',
+  'CONNECTING AUDIO BUS',
+  'SYNCING MEMORY',
+  'RESTORING GLASS CORE',
+  'DECODING FREQUENCY',
+  'TRANSMISSION READY'
+];
+
+// ───────────────────────────────────────────────────────
+// TITLE
+// ───────────────────────────────────────────────────────
+
+let titlePhase=false;
+let titleT=0;
+
+const TITLE='GLASS FREQUENCY';
+
+// ───────────────────────────────────────────────────────
+// LYRICS
+// ───────────────────────────────────────────────────────
+
+const LYRICS=[
+  {text:'STATIC ON YOUR LIPS',dur:2.4},
+  {text:'YOU SPEAK IN SILVER NOISE',dur:2.6},
+  {text:'SAY MY NAME',dur:1.8},
+  {text:'LIKE IT IS SOMETHING TO DESTROY',dur:2.5},
+  {text:'WE BEND WE BREAK',dur:2.0},
+  {text:'WE SYNCHRONIZE',dur:2.2},
+  {text:'IN BETWEEN THE FRAMES OF NIGHT',dur:2.8},
+  {text:'WE ARE A GLASS FREQUENCY',dur:3.0},
+  {text:'SHATTERING IN HARMONY',dur:2.8},
+  {text:'CUT ME INTO MELODIES',dur:2.6},
+  {text:'I STILL HEAR YOU CALLING ME',dur:3.2},
+  {text:'FRACTURE ME CLEAN',dur:2.0},
+  {text:'NO LANGUAGE',dur:2.2},
+  {text:'JUST WAVES',dur:2.0},
+  {text:'DYING IN INFINITY',dur:3.0}
+];
+
+let lyricIndex=0;
+let lyricT=0;
+
+// ───────────────────────────────────────────────────────
+// GLITCH
+// ───────────────────────────────────────────────────────
+
+let glitchSlices=[];
+
+function triggerGlitch(intensity=1){
+
+  const count=Math.floor(5+intensity*12);
+
+  for(let i=0;i<count;i++){
+
+    glitchSlices.push({
+      y:Math.random()*H,
+      h:2+Math.random()*50,
+      ox:(Math.random()-0.5)*intensity*160,
+      life:0.03+Math.random()*0.15,
+      age:0
+    });
+  }
+}
+
+function drawGlitches(){
+
+  for(let i=glitchSlices.length-1;i>=0;i--){
+
+    const s=glitchSlices[i];
+
+    s.age+=dt;
+
+    if(s.age>s.life){
+      glitchSlices.splice(i,1);
+      continue;
+    }
+
+    const oy=Math.max(0,Math.min(s.y,H-s.h));
+
+    try{
+      const d=cx.getImageData(0,oy,W,s.h);
+      cx.putImageData(d,s.ox,oy);
+    }catch(e){}
+  }
+}
+
+// ───────────────────────────────────────────────────────
+// AUDIO SYSTEM
+// ───────────────────────────────────────────────────────
+
+const audioBars=new Array(80).fill(0);
+let bassPulse=0;
+
+function updateAudio(){
+
+  for(let i=0;i<audioBars.length;i++){
+
+    const low=i<12?1.8:1;
+
+    const wave=Math.sin(T*2+i*0.2)*0.5+0.5;
+    const pulse=Math.sin(T*8+i*0.6)*0.5+0.5;
+
+    audioBars[i]=wave*70*low+pulse*50*low+Math.random()*12;
+  }
+
+  bassPulse=Math.sin(T*5)*0.5+0.5;
+}
+
+function drawAudio(){
+
+  const bw=W/audioBars.length;
+
+  cx.save();
+
+  for(let i=0;i<audioBars.length;i++){
+
+    const h=audioBars[i];
+
+    cx.globalAlpha=0.08+h/240;
+    cx.fillStyle='#000';
+
+    cx.fillRect(i*bw,H-h,bw-2,h);
+  }
+
+  cx.restore();
+
+  // center ring
+
+  cx.save();
+
+  cx.globalAlpha=0.05+bassPulse*0.12;
+  cx.strokeStyle='#000';
+  cx.lineWidth=2;
+
+  cx.beginPath();
+  cx.arc(
+    W/2,
+    H/2,
+    120+bassPulse*100,
+    0,
+    Math.PI*2
+  );
+
+  cx.stroke();
+
+  cx.restore();
+}
+
+// ───────────────────────────────────────────────────────
+// DIGITAL PARTICLES
+// ───────────────────────────────────────────────────────
+
+const NOISE=[];
+
+for(let i=0;i<300;i++){
+
+  NOISE.push({
+    x:Math.random()*W,
+    y:Math.random()*H,
+    s:1+Math.random()*3,
+    a:0.03+Math.random()*0.08,
+    spd:0.5+Math.random()*3
+  });
+}
+
+function drawNoise(){
+
+  cx.save();
+
+  NOISE.forEach(n=>{
+
+    n.y+=n.spd;
+
+    if(n.y>H){
+      n.y=-10;
+      n.x=Math.random()*W;
+    }
+
+    if(Math.random()>0.5){
+
+      cx.globalAlpha=n.a;
+      cx.fillStyle='#000';
+      cx.fillRect(n.x,n.y,n.s,n.s);
+    }
+  });
+
+  cx.restore();
+}
+
+// ───────────────────────────────────────────────────────
+// BACKGROUND GRID
+// ───────────────────────────────────────────────────────
+
+function drawGrid(){
+
+  cx.save();
+
+  cx.strokeStyle='rgba(0,0,0,0.05)';
+  cx.lineWidth=1;
+
+  const size=40;
+
+  for(let x=0;x<W;x+=size){
+    cx.beginPath();
+    cx.moveTo(x,0);
+    cx.lineTo(x,H);
+    cx.stroke();
+  }
+
+  for(let y=0;y<H;y+=size){
+    cx.beginPath();
+    cx.moveTo(0,y);
+    cx.lineTo(W,y);
+    cx.stroke();
+  }
+
+  cx.restore();
+}
+
+// ───────────────────────────────────────────────────────
+// WAVES
+// ───────────────────────────────────────────────────────
+
+function drawWaves(){
+
+  cx.save();
+
+  for(let w=0;w<5;w++){
+
+    cx.beginPath();
+
+    cx.globalAlpha=0.06;
+    cx.strokeStyle='#000';
+    cx.lineWidth=1;
+
+    for(let x=0;x<W;x+=4){
+
+      const y=
+        H*0.2+
+        w*120+
+        Math.sin(x*0.008+T*(0.5+w*0.3))*20;
+
+      if(x===0) cx.moveTo(x,y);
+      else cx.lineTo(x,y);
+    }
+
+    cx.stroke();
+  }
+
+  cx.restore();
+}
+
+// ───────────────────────────────────────────────────────
+// BOOT SCREEN
+// ───────────────────────────────────────────────────────
+
+function drawBoot(){
+
+  bootT+=dt;
+
+  bootProgress=Math.min(bootT/4,1);
+
+  cx.fillStyle='#fff';
+  cx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawNoise();
+
+  cx.save();
+
+  cx.textAlign='center';
+  cx.textBaseline='middle';
+
+  cx.fillStyle='#000';
+
+  cx.font='900 72px Arial Black';
+
+  cx.globalAlpha=0.9;
+  cx.fillText('GLASS FREQUENCY',W/2,H/2-120);
+
+  // loading bar
+
+  const bw=520;
+  const bh=14;
+
+  cx.globalAlpha=0.1;
+  cx.fillRect(W/2-bw/2,H/2,bw,bh);
+
+  cx.globalAlpha=1;
+  cx.fillRect(W/2-bw/2,H/2,bw*bootProgress,bh);
+
+  // percent
+
+  cx.font='400 18px Courier New';
+
+  cx.globalAlpha=0.45;
+
+  cx.fillText(
+    Math.floor(bootProgress*100)+'%',
+    W/2,
+    H/2+40
+  );
+
+  // terminal lines
+
+  const visible=Math.floor(bootProgress*BOOT_LINES.length);
+
+  cx.textAlign='left';
+
+  for(let i=0;i<visible;i++){
+
+    cx.globalAlpha=0.35+Math.random()*0.3;
+
+    cx.fillText(
+      '> '+BOOT_LINES[i],
+      W/2-240,
+      H/2+90+i*24
+    );
+  }
+
+  cx.restore();
+
+  if(bootProgress>=1){
+
+    bootPhase=false;
+    titlePhase=true;
+    titleT=0;
+
+    triggerGlitch(1.2);
+  }
+}
+
+// ───────────────────────────────────────────────────────
+// TITLE SCREEN
+// ───────────────────────────────────────────────────────
+
+function drawTitle(){
+
+  titleT+=dt;
+
+  cx.fillStyle='#fff';
+  cx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawNoise();
+  drawAudio();
+
+  cx.save();
+
+  cx.textAlign='center';
+  cx.textBaseline='middle';
+
+  const fs=90;
+
+  cx.font=`900 ${fs}px Arial Black`;
+
+  // shadow glitch
+
+  cx.globalAlpha=0.08;
+  cx.fillStyle='#000';
+
+  cx.fillText(TITLE,W/2+6,H/2+4);
+  cx.fillText(TITLE,W/2-6,H/2-4);
+
+  // main
+
+  cx.globalAlpha=1;
+  cx.fillStyle='#000';
+
+  cx.fillText(TITLE,W/2,H/2);
+
+  // subtitle
+
+  cx.font='400 14px Courier New';
+
+  cx.globalAlpha=0.3;
+
+  cx.fillText(
+    'DIGITAL AUDIO TRANSMISSION ACTIVE',
+    W/2,
+    H/2+70
+  );
+
+  cx.globalAlpha=0.2+Math.sin(T*4)*0.1;
+
+  cx.fillText(
+    '[ CLICK TO START ]',
+    W/2,
+    H-40
+  );
+
+  cx.restore();
+
+  drawGlitches();
+}
+
+// ───────────────────────────────────────────────────────
+// LYRICS
+// ───────────────────────────────────────────────────────
+
+function drawLyrics(){
+
+  const current=LYRICS[lyricIndex];
+
+  lyricT+=dt;
+
+  if(lyricT>current.dur){
+
+    lyricIndex=(lyricIndex+1)%LYRICS.length;
+    lyricT=0;
+
+    triggerGlitch(1.3);
+  }
+
+  const p=lyricT/current.dur;
+
+  const enter=Math.min(lyricT/0.5,1);
+
+  const exit=Math.max(0,(lyricT-(current.dur-0.5))/0.5);
+
+  const scale=1.2-enter*0.2;
+
+  cx.save();
+
+  cx.translate(W/2,H/2);
+  cx.scale(scale,scale);
+
+  cx.textAlign='center';
+  cx.textBaseline='middle';
+
+  const fs=70;
+
+  cx.font=`900 ${fs}px Arial Black`;
+
+  // echo layers
+
+  for(let i=5;i>0;i--){
+
+    cx.globalAlpha=(0.015*i)*(1-exit);
+    cx.fillStyle='#000';
+
+    cx.fillText(
+      current.text,
+      i*6,
+      i*10
+    );
+  }
+
+  // glitch jitter
+
+  const jx=(Math.random()-0.5)*4;
+  const jy=(Math.random()-0.5)*2;
+
+  cx.globalAlpha=(1-exit);
+  cx.fillStyle='#000';
+
+  cx.fillText(current.text,jx,jy);
+
+  cx.restore();
+}
+
+// ───────────────────────────────────────────────────────
+// MAIN BG
+// ───────────────────────────────────────────────────────
+
+function drawBG(){
+
+  cx.fillStyle='#fff';
+  cx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawWaves();
+  drawNoise();
+  drawAudio();
+}
+
+// ───────────────────────────────────────────────────────
+// FRAME
+// ───────────────────────────────────────────────────────
+
+function frame(){
+
+  requestAnimationFrame(frame);
+
+  dt=1/60;
+
+  T+=dt;
+  beatT+=dt;
+
+  updateAudio();
+
+  // beat glitch
+
+  if((beatT%BEAT)<0.03){
+
+    if(Math.random()>0.4){
+      triggerGlitch(0.6);
+    }
+  }
+
+  if(bootPhase){
+
+    drawBoot();
+
+    return;
+  }
+
+  if(titlePhase){
+
+    drawTitle();
+
+    return;
+  }
+
+  drawBG();
+
+  drawLyrics();
+
+  drawGlitches();
+
+  // bass flash
+
+  if(bassPulse>0.95){
+
+    cx.save();
+
+    cx.globalAlpha=0.02;
+    cx.fillStyle='#000';
+    cx.fillRect(0,0,W,H);
+
+    cx.restore();
+  }
+}
+
+frame();
+
+// ───────────────────────────────────────────────────────
+// CLICK EVENTS
+// ───────────────────────────────────────────────────────
+
+cv.addEventListener('click',()=>{
+
+  if(titlePhase){
+
+    titlePhase=false;
+
+    triggerGlitch(1.8);
+
+    return;
+  }
+
+  lyricT=999;
+});
+
+// ───────────────────────────────────────────────────────
+// RESIZE
+// ───────────────────────────────────────────────────────
+
+window.addEventListener('resize',()=>{
+
+  W=window.innerWidth;
+  H=window.innerHeight;
+
+  cv.width=W;
+  cv.height=H;
+});
+
+</script>
+
+</body>
+</html>
